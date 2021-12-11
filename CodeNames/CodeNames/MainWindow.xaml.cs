@@ -188,10 +188,6 @@ namespace CodeNames
                 {
                     help.Content = response;
                 } ); 
-
-
-                Thread thread = new Thread(ChangeText);
-                thread.Start();
                 // Переводим в сигнальное состояние
                 receiveDone.Set();
                // sendDone.Reset();
@@ -202,10 +198,6 @@ namespace CodeNames
                 Send(socket, message);
                 sendDone.WaitOne();*/
             }
-        }
-        private static void ChangeText()
-        {
-            
         }
         public void Connect(EndPoint remoteEP, Socket client)
         {
