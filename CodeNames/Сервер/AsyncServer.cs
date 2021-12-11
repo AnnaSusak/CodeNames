@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -121,13 +121,13 @@ namespace Server
 
             //        socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             //       socket.Connect(endPoint);
-            string ip2 = "127.0.0.1";
+        /*    string ip2 = "127.0.0.1";
             IPAddress iPAddress2 = IPAddress.Parse(ip2);
             IPEndPoint endPoint2 = new IPEndPoint(iPAddress2, port);
             socket_user2 = new Socket(iPAddress.AddressFamily,
                 SocketType.Stream, ProtocolType.Tcp);
             //Connect(endPoint, socket);
-            Connect(endPoint2, socket_user2);
+            Connect(endPoint2, socket_user2);*/
             listener_user2.Bind(endPoint);
             allDone.Reset();
             listener_user2.Listen(10);
