@@ -82,6 +82,90 @@ namespace CodeNames
                     grid1.Children.Add(b);
                 }
             }
+        }using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Documents;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
+using System.Windows.Shapes;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+using System.Windows.Threading;
+
+namespace CodeNames
+{
+    /// <summary>
+    /// Логика взаимодействия для MainWindow.xaml
+    /// </summary>
+    public partial class MainWindow : Window
+    {
+        private const int port = 8081;
+        //server values
+        private static ManualResetEvent allDone = new ManualResetEvent(false);
+        //client methods
+        private static ManualResetEvent connectDone = new ManualResetEvent(false);
+        private static ManualResetEvent sendDone = new ManualResetEvent(false);
+        private static ManualResetEvent receiveDone = new ManualResetEvent(false);
+        private static Socket socket;
+        private static Socket listener;
+        private static StateObject state = new StateObject();
+        private static string response;
+        private const int size = 5;
+        private const int numOfBotttomElems = 1;
+        private Button[,] buttons = new Button[size, size];
+        private TextBox chat;
+        private Button send;
+        private static Label help;
+        public MainWindow()
+        {
+            InitializeComponent();
+            Start();
+            AddingElems();
+        }
+        public void AddingElems()
+        {
+            send = new Button();
+            Grid.SetColumn(send, size);
+            Grid.SetRow(send, size+numOfBotttomElems);
+            send.Content = "Send";
+            send.Click += Send_Click;
+            grid1.Children.Add(send);
+
+            help = new Label();
+            Grid.SetColumn(help, 0);
+            Grid.SetRow(help, 0);
+            Grid.SetColumnSpan(help, size);
+            help.Content = "Введите шестизначный код пароль по договоренности с игроками.";
+            grid1.Children.Add(help);
+
+            chat = new TextBox();
+            Grid.SetColumn(chat, size);
+            Grid.SetRow(chat, numOfBotttomElems);
+            Grid.SetRowSpan(chat, size);
+            chat.TextWrapping = TextWrapping.Wrap;
+            chat.Visibility = Visibility.Visible;
+            grid1.Children.Add(chat);
+            for (int i = 0; i < size; i++)
+            {
+                for (int j = 0; j < size; j++)
+                {
+                    Button b = new Button();
+                    Grid.SetColumn(b, j);
+                    Grid.SetRow(b, i+numOfBotttomElems);
+                    buttons[i, j] = b;
+                    buttons[i, j].Click += Button1_Click;
+                    grid1.Children.Add(b);
+                }
+            }
         }
         private void Send_Click(object sender, RoutedEventArgs e)
         {
@@ -138,6 +222,117 @@ namespace CodeNames
             sendDone.Set();
 
             // Signal that all bytes have been sent.  
+            //allDone.Set();
+            Receive(client);
+            allDone.WaitOne(); 
+        }
+        private void Receive(Socket client)
+        {
+            // Create the state object.  
+            StateObject state = new StateObject();
+
+            // передача ссылки на сокет нашему state object
+            state.socket = client;
+
+            // Начать получать данные с сервера
+            client.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0,
+                new AsyncCallback(ReceiveCallback), state);
+
+            // блокировка до окончании асинхронного приема данных
+            receiveDone.WaitOne();
+        }
+
+        private void ReceiveCallback(IAsyncResult ar)
+        {
+            // Извлекаем объект состояния и клинетский сокет из объекта асинхронного состояния
+            StateObject state = (StateObject)ar.AsyncState;
+            Socket client = state.socket;
+
+            // Чтение данных с сервера
+            int bytesRead = client.EndReceive(ar);
+            // There might be more data, so store the data received so far.  
+            state.textBuilder.Append(Encoding.ASCII.GetString(state.buffer, 0, bytesRead));
+            if (bytesRead >= StateObject.BufferSize)
+            {
+                client.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0,
+                new AsyncCallback(ReceiveCallback), state);
+                receiveDone.WaitOne();
+            }
+            else
+            {
+                // Все данные пришли. Записываем ответ в response
+                if (state.textBuilder.Length > 1)
+                {
+                    response = state.textBuilder.ToString();
+                }
+                
+
+                this.Dispatcher.BeginInvoke(DispatcherPriority.Normal,
+                (ThreadStart)delegate ()
+                {
+                    help.Content = response;
+                } ); 
+                // Переводим в сигнальное состояние
+                receiveDone.Set();
+               // sendDone.Reset();
+
+                /*Console.WriteLine("Write a message");
+                string message = Console.ReadLine();
+                // Отправляем данные на сервер
+                Send(socket, message);
+                sendDone.WaitOne();*/
+            }
+        }
+        public void Connect(EndPoint remoteEP, Socket client)
+        {
+            client.BeginConnect(remoteEP, new AsyncCallback(ConnectCallback), client);
+
+            connectDone.WaitOne();
+        }
+
+        private static void ConnectCallback(IAsyncResult ar)
+        {
+            // Извлекаем сокет из объекта состояния
+            listener = (Socket)ar.AsyncState;
+
+            // Ждем окончания конекта  
+            listener.EndConnect(ar);
+
+            // Переключаем устройство в сигнальное состояние
+            connectDone.Set();
+        }
+         void AcceptCallBack(IAsyncResult ar)
+        {
+
+            Socket listener = (Socket)ar.AsyncState;
+            Socket handler = listener.EndAccept(ar);
+            state.socket = handler;
+            handler.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0, ReadCallBack, state);
+            sendDone.Set();
+        }
+         void ReadCallBack(IAsyncResult ar)
+        {
+            StateObject state = (StateObject)ar.AsyncState;
+            Socket handler = state.socket;
+            int bytesRead = handler.EndReceive(ar);
+            string text = Encoding.ASCII.GetString(state.buffer, 0, bytesRead);
+            Console.WriteLine("You received");
+            Console.WriteLine(text);
+            while (true)
+            {
+                Console.WriteLine("Write a message");
+                string message = Console.ReadLine();
+                // Отправляем данные на сервер
+                Send(socket, message);
+                allDone.Reset();
+                listener.BeginAccept(AcceptCallBack, socket);
+                allDone.WaitOne();
+            }
+        }
+
+    }
+}
+
             //allDone.Set();
             Receive(client);
             allDone.WaitOne(); 
