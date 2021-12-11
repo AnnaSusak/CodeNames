@@ -1,4 +1,4 @@
-using Syusing System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,6 +15,7 @@ using System.Windows.Shapes;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Windows.Threading;
 
 namespace CodeNames
 {
@@ -35,28 +36,36 @@ namespace CodeNames
         private static StateObject state = new StateObject();
         private static string response;
         private const int size = 5;
+        private const int numOfBotttomElems = 1;
         private Button[,] buttons = new Button[size, size];
         private TextBox chat;
         private Button send;
+        private static Label help;
         public MainWindow()
         {
             InitializeComponent();
-            AddingElems();
             Start();
-
+            AddingElems();
         }
         public void AddingElems()
         {
             send = new Button();
             Grid.SetColumn(send, size);
-            Grid.SetRow(send, size);
+            Grid.SetRow(send, size+numOfBotttomElems);
             send.Content = "Send";
             send.Click += Send_Click;
             grid1.Children.Add(send);
 
+            help = new Label();
+            Grid.SetColumn(help, 0);
+            Grid.SetRow(help, 0);
+            Grid.SetColumnSpan(help, size);
+            help.Content = "Введите шестизначный код пароль по договоренности с игроками.";
+            grid1.Children.Add(help);
+
             chat = new TextBox();
             Grid.SetColumn(chat, size);
-            Grid.SetRow(chat, 0);
+            Grid.SetRow(chat, numOfBotttomElems);
             Grid.SetRowSpan(chat, size);
             chat.TextWrapping = TextWrapping.Wrap;
             chat.Visibility = Visibility.Visible;
@@ -67,7 +76,7 @@ namespace CodeNames
                 {
                     Button b = new Button();
                     Grid.SetColumn(b, j);
-                    Grid.SetRow(b, i);
+                    Grid.SetRow(b, i+numOfBotttomElems);
                     buttons[i, j] = b;
                     buttons[i, j].Click += Button1_Click;
                     grid1.Children.Add(b);
@@ -76,7 +85,11 @@ namespace CodeNames
         }
         private void Send_Click(object sender, RoutedEventArgs e)
         {
+            sendDone.Reset();
+            Send(socket, chat.Text);
 
+
+            sendDone.WaitOne();
         }
         private void Button1_Click(object sender, RoutedEventArgs e)
         {
@@ -101,7 +114,7 @@ namespace CodeNames
             Send(socket, message);
             sendDone.WaitOne();*/
         }
-        private static void Send(Socket client, String data)
+        private void Send(Socket client, String data)
         {
             // Convert the string data to byte data using ASCII encoding.  
             byte[] byteData = Encoding.ASCII.GetBytes(data);
@@ -114,19 +127,22 @@ namespace CodeNames
 
         }
 
-        private static void SendCallback(IAsyncResult ar)
+        private void SendCallback(IAsyncResult ar)
         {
             // Извлекаем сокет из объекта состояния
             Socket client = (Socket)ar.AsyncState;
 
             // Завершаем отправление даных 
             client.EndSend(ar);   // lock
+
+            sendDone.Set();
+
             // Signal that all bytes have been sent.  
-            allDone.Set();
+            //allDone.Set();
             Receive(client);
-            allDone.WaitOne();
+            allDone.WaitOne(); 
         }
-        private static void Receive(Socket client)
+        private void Receive(Socket client)
         {
             // Create the state object.  
             StateObject state = new StateObject();
@@ -142,7 +158,7 @@ namespace CodeNames
             receiveDone.WaitOne();
         }
 
-        private static void ReceiveCallback(IAsyncResult ar)
+        private void ReceiveCallback(IAsyncResult ar)
         {
             // Извлекаем объект состояния и клинетский сокет из объекта асинхронного состояния
             StateObject state = (StateObject)ar.AsyncState;
@@ -165,19 +181,33 @@ namespace CodeNames
                 {
                     response = state.textBuilder.ToString();
                 }
-                Console.WriteLine("You received");
-                Console.WriteLine(response);
+                
+
+                this.Dispatcher.BeginInvoke(DispatcherPriority.Normal,
+                (ThreadStart)delegate ()
+                {
+                    help.Content = response;
+                } ); 
+
+
+                Thread thread = new Thread(ChangeText);
+                thread.Start();
                 // Переводим в сигнальное состояние
                 receiveDone.Set();
-                sendDone.Reset();
-                Console.WriteLine("Write a message");
+               // sendDone.Reset();
+
+                /*Console.WriteLine("Write a message");
                 string message = Console.ReadLine();
                 // Отправляем данные на сервер
                 Send(socket, message);
-                sendDone.WaitOne();
+                sendDone.WaitOne();*/
             }
         }
-        public static void Connect(EndPoint remoteEP, Socket client)
+        private static void ChangeText()
+        {
+            
+        }
+        public void Connect(EndPoint remoteEP, Socket client)
         {
             client.BeginConnect(remoteEP, new AsyncCallback(ConnectCallback), client);
 
@@ -195,7 +225,7 @@ namespace CodeNames
             // Переключаем устройство в сигнальное состояние
             connectDone.Set();
         }
-        static void AcceptCallBack(IAsyncResult ar)
+         void AcceptCallBack(IAsyncResult ar)
         {
 
             Socket listener = (Socket)ar.AsyncState;
@@ -204,7 +234,7 @@ namespace CodeNames
             handler.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0, ReadCallBack, state);
             sendDone.Set();
         }
-        static void ReadCallBack(IAsyncResult ar)
+         void ReadCallBack(IAsyncResult ar)
         {
             StateObject state = (StateObject)ar.AsyncState;
             Socket handler = state.socket;
